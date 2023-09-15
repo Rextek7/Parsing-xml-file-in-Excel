@@ -1,0 +1,1463 @@
+Option Explicit
+
+' Функция GetAttributeOrSpace возвращает значение атрибута элемента или пустую строку, если атрибут не существует
+' данная функция необходима для избежания значений null и корректного вывода true и false
+Function GetAttributeOrSpace(element As Object, attributeName As String) As String
+    ' Проверяем, существует ли атрибут с заданным именем
+    If element.Attributes.getNamedItem(attributeName) Is Nothing Then
+        ' Если атрибут не существует, возвращаем пустую строку
+        GetAttributeOrSpace = ""
+    Else
+        ' Если атрибут существует, проверяем его значение
+        If element.Attributes.getNamedItem(attributeName).Text = "false" Then
+            ' Если значение атрибута равно "false", возвращаем его XML-представление
+            GetAttributeOrSpace = Split(element.Attributes.getNamedItem(attributeName).XML, "=")(1)
+        ElseIf element.Attributes.getNamedItem(attributeName).Text = "true" Then
+            ' Если значение атрибута равно "true", возвращаем его XML-представление
+            GetAttributeOrSpace = Split(element.Attributes.getNamedItem(attributeName).XML, "=")(1)
+        Else
+            ' В противном случае возвращаем текстовое значение атрибута
+            GetAttributeOrSpace = element.Attributes.getNamedItem(attributeName).Text
+        End If
+    End If
+End Function
+
+' Функция FlattenArray преобразует двумерный массив в одномерный массив
+' функция необходима для вывода двумерных массивов с более чем 6000 элементов
+Function FlattenArray(twoDimArray As Variant) As Variant
+    Dim rows As Long ' Количество строк в двумерном массиве
+    Dim cols As Long ' Количество столбцов в двумерном массиве
+    Dim i As Long ' Счетчик для цикла по столбцам
+    Dim j As Long ' Счетчик для цикла по строкам
+    Dim oneDimArray() As Variant ' Одномерный массив для хранения результата
+    Dim index As Long ' Индекс для добавления элементов в одномерный массив
+    
+    ' Определяем размеры двумерного массива
+    rows = UBound(twoDimArray, 1)
+    cols = UBound(twoDimArray, 2)
+    
+    ' Инициализируем одномерный массив нужным размером
+    ReDim oneDimArray(rows * cols - 1)
+    
+    ' Инициализируем индекс для добавления элементов в одномерный массив
+    index = 0
+    
+    ' Проходим по столбцам двумерного массива
+    For i = 1 To cols
+        ' Проходим по строкам двумерного массива
+        For j = 1 To rows
+            ' Добавляем текущий элемент двумерного массива в одномерный массив
+            oneDimArray(index) = twoDimArray(j, i)
+            ' Увеличиваем индекс для добавления следующего элемента в одномерный массив
+            index = index + 1
+        Next j
+    Next i
+    
+    ' Возвращаем результат - одномерный массив с элементами из двумерного массива
+    FlattenArray = oneDimArray
+End Function
+
+
+' Функция OutputArray выводит элементы одномерного массива в лист Excel
+
+' Функция OutputArray принимает на вход одномерный массив oneDimArray и число split_point,
+' которое определяет количество столбцов для вывода массива.
+' Функция вычисляет количество строк и столбцов, необходимых для вывода массива,
+' и затем проходит по этим строкам и столбцам, выводя элементы массива в соответствующие ячейки листа Excel.
+Function OutputArray(oneDimArray As Variant, split_point As Long)
+    Dim rows As Long ' Количество строк для вывода массива
+    Dim cols As Long ' Количество столбцов для вывода массива
+    Dim i As Long ' Счетчик для цикла по строкам
+    Dim j As Long ' Счетчик для цикла по столбцам
+    Dim index As Long ' Индекс для доступа к элементам массива
+    
+    ' Определяем количество строк и столбцов для вывода массива
+    rows = UBound(oneDimArray) \ split_point + 1
+    cols = split_point
+    
+    ' Инициализируем индекс для доступа к элементам массива
+    index = 0
+    
+    ' Проходим по строкам
+    For i = 1 To rows
+        ' Проходим по столбцам
+        For j = 1 To cols
+            ' Проверяем, не вышли ли мы за границы массива
+            If index <= UBound(oneDimArray) Then
+                ' Выводим текущий элемент массива в ячейку листа Excel
+                Cells(i + 1, j).Value = oneDimArray(index)
+                ' Увеличиваем индекс для доступа к следующему элементу массива
+                index = index + 1
+            End If
+        Next j
+    Next i
+End Function
+
+Sub ConvertXMLtoExcel()
+    Dim fileDialog As fileDialog ' Объект диалогового окна выбора файла
+    Dim xml_file As String ' Путь к выбранному XML-файлу
+    
+    ' Создаем объект диалогового окна выбора файла
+    Set fileDialog = Application.fileDialog(msoFileDialogFilePicker)
+    
+    With fileDialog
+        .AllowMultiSelect = False
+        .Filters.Clear
+        .Filters.Add "XML Files", "*.xml"
+        .Title = "Выберите XML-файл который остановит ваш пк на день"
+
+        If .Show = True Then
+            xml_file = .SelectedItems(1)
+        End If
+    End With
+    
+    ' Отключаем обновление экрана для ускорения работы макроса
+    Application.ScreenUpdating = False
+    
+    ' Создаем объект для работы с XML-документом
+    Dim LoadXMLDoc As MSXML2.DOMDocument60
+    Set LoadXMLDoc = New MSXML2.DOMDocument60
+    
+    ' Настраиваем параметры загрузки XML-документа
+    LoadXMLDoc.async = False ' Отключаем асинхронную загрузку документа
+    LoadXMLDoc.resolveExternals = False ' Отключаем разрешение внешних ссылок
+    
+    ' Загружаем XML-документ из файла
+    LoadXMLDoc.Load xml_file
+    
+    ' Получаем корневой элемент XML-документа
+    Dim ClassLibrary As MSXML2.IXMLDOMNode
+    Set ClassLibrary = LoadXMLDoc.DocumentElement
+    
+    ' Создаем объект для записи данных в книгу Excel
+    Dim wb As Workbook
+    Set wb = Workbooks.Add
+
+        
+    
+    ' ClassLibrary
+    ' Создаем двумерный массив для хранения атрибутов элемента ClassLibrary
+    ' двумерный массив ClassLibrary_arr для хранения атрибутов элемента ClassLibrary.
+    ' Массив заполняется значениями атрибутов элемента ClassLibrary, а затем данные из массива записываются в лист ClassLibrary книги Excel.
+    Dim ClassLibrary_arr() As Variant
+    ReDim ClassLibrary_arr(1 To 6, 1 To 1)
+    
+    ' Заполняем массив значениями атрибутов элемента ClassLibrary
+    ClassLibrary_arr(1, 1) = ClassLibrary.Attributes.getNamedItem("id").Text
+    ClassLibrary_arr(2, 1) = ClassLibrary.Attributes.getNamedItem("name").Text
+    ClassLibrary_arr(3, 1) = ClassLibrary.Attributes.getNamedItem("description").Text
+    ClassLibrary_arr(4, 1) = ClassLibrary.Attributes.getNamedItem("version").Text
+    ClassLibrary_arr(5, 1) = ClassLibrary.Attributes.getNamedItem("versionDate").Text
+    ClassLibrary_arr(6, 1) = ClassLibrary.Attributes.getNamedItem("contentType").Text
+    
+    ' Записываем данные из массива в лист Excel
+    With wb.ActiveSheet
+        .name = "ClassLibrary"
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "description"
+        .Cells(1, 4).Value = "version"
+        .Cells(1, 5).Value = "versionDate"
+        .Cells(1, 6).Value = "contentType"
+        .Range(.Cells(2, 1), .Cells(2, 6)).Value = Application.Transpose(ClassLibrary_arr)
+    End With
+    
+    ' Получаем список элементов ExtensionNamespaces из XML-документа
+    Dim ExtensionNamespaces As MSXML2.IXMLDOMNodeList
+    Set ExtensionNamespaces = LoadXMLDoc.DocumentElement.SelectNodes("*[local-name()='ExtensionNamespaces']/*")
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов ExtensionNamespaces
+    ' Массив заполняется значениями атрибутов эллементов списка ExtensionNamespaces, а затем данные из массива записываются в новый лист
+    Dim ExtensionNamespace_arr() As Variant
+    ReDim ExtensionNamespace_arr(1 To 5, 1 To ExtensionNamespaces.Length)
+    
+    Dim res As String ' Переменная для хранения результата работы функции GetAttributeOrSpace
+    Dim i As Long ' Счетчик для цикла по элементам списка ExtensionNamespaces
+    
+    ' Проходим по элементам списка ExtensionNamespaces
+    For i = 0 To ExtensionNamespaces.Length - 1
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка ExtensionNamespaces
+        ExtensionNamespace_arr(1, i + 1) = ExtensionNamespaces(i).Attributes.getNamedItem("prefix").Text
+        
+        ExtensionNamespace_arr(2, i + 1) = ExtensionNamespaces(i).Attributes.getNamedItem("name").Text
+        
+        ExtensionNamespace_arr(3, i + 1) = ExtensionNamespaces(i).Attributes.getNamedItem("type").Text
+        
+        ExtensionNamespace_arr(4, i + 1) = ExtensionNamespaces(i).Attributes.getNamedItem("description").Text
+        
+        ExtensionNamespace_arr(5, i + 1) = ExtensionNamespaces(i).Attributes.getNamedItem("uri").Text
+        
+    Next i
+    
+    ' Записываем данные из массива в новый лист Excel
+    
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "ExtensionNamespaces" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "prefix"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "type"
+        .Cells(1, 4).Value = "description"
+        .Cells(1, 5).Value = "uri"
+        ' Записываем данные из массива в лист Excel
+        .Range(.Cells(2, 1), .Cells(ExtensionNamespaces.Length + 2 - 1, UBound(ExtensionNamespace_arr))).Value _
+            = Application.Transpose(ExtensionNamespace_arr)
+    End With
+    
+    ' Получаем список элементов ReferenceData из XML-документа
+    Dim ReferenceData As MSXML2.IXMLDOMNodeList
+    Set ReferenceData = LoadXMLDoc.DocumentElement.SelectNodes("*[local-name()='ReferenceData']/*")
+    
+    ' Получаем список элементов NamingAndNumbering из первого элемента списка ReferenceData
+    Dim NamingAndNumbering As MSXML2.IXMLDOMNodeList
+    Set NamingAndNumbering = ReferenceData.Item(0).ChildNodes
+    
+    ' Получаем список элементов Elements из первого элемента списка NamingAndNumbering
+    Dim Elements As MSXML2.IXMLDOMNodeList
+    Set Elements = NamingAndNumbering.Item(0).ChildNodes
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Elements
+    Dim Elements_arr() As Variant
+    ReDim Elements_arr(1 To NamingAndNumbering.Item(0).ChildNodes.Item(0).Attributes.Length, 1 To Elements.Length)
+    
+    ' Проходим по элементам списка Elements
+    For i = 0 To Elements.Length - 1
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Elements
+        ' Используем функцию GetAttributeOrSpace для получения значения атрибута или пустой строки, если атрибут не существует
+        Elements_arr(1, i + 1) = GetAttributeOrSpace(Elements.Item(i), "id")
+        Elements_arr(2, i + 1) = GetAttributeOrSpace(Elements.Item(i), "name")
+        Elements_arr(3, i + 1) = GetAttributeOrSpace(Elements.Item(i), "description")
+        Elements_arr(4, i + 1) = GetAttributeOrSpace(Elements.Item(i), "mandatory")
+        Elements_arr(5, i + 1) = GetAttributeOrSpace(Elements.Item(i), "regEx")
+        Elements_arr(6, i + 1) = GetAttributeOrSpace(Elements.Item(i), "suffix")
+        Elements_arr(7, i + 1) = GetAttributeOrSpace(Elements.Item(i), "source")
+    
+    Next i
+
+    
+    ' Записываем данные из массива в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "N&N Elements" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "description"
+        .Cells(1, 4).Value = "mandatory"
+        .Cells(1, 5).Value = "regEx"
+        .Cells(1, 6).Value = "suffix"
+        .Cells(1, 7).Value = "source"
+        
+        ' Записываем данные из массива в лист Excel
+        .Range(.Cells(2, 1), .Cells(Elements.Length + 2 - 1, UBound(Elements_arr))).Value _
+            = Application.Transpose(Elements_arr)
+    End With
+    
+    ' Получаем список элементов Templates из списка NamingAndNumbering
+    Dim Templates As MSXML2.IXMLDOMNodeList
+    Set Templates = NamingAndNumbering.Item(1).ChildNodes
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Templates
+    Dim Templates_arr() As Variant
+    ReDim Templates_arr(1 To NamingAndNumbering.Item(1).ChildNodes.Item(0).Attributes.Length, 1 To Templates.Length)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов элементов списка Templates
+    Dim Template_Element_arr() As Variant
+    ReDim Template_Element_arr(1 To 8, 1 To Templates.Length * 8)
+    
+    Dim j As Long ' Счетчик для цикла по дочерним элементам элемента списка Templates
+    Dim k As Long ' Индекс для добавления элементов в массив Template_Element_arr
+    k = 1
+    
+    ' Проходим по элементам списка Templates
+    For i = 0 To Templates.Length - 1
+        
+        ' Сохраняем значение атрибута id текущего элемента списка Templates в переменную Template_id
+        Dim Template_id As String
+        Template_id = Templates(i).Attributes.getNamedItem("id").Text
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Templates
+        ' Используем функцию GetAttributeOrSpace для получения значения атрибута или пустой строки, если атрибут не существует
+        Templates_arr(1, i + 1) = GetAttributeOrSpace(Templates.Item(i), "id")
+        Templates_arr(2, i + 1) = GetAttributeOrSpace(Templates.Item(i), "name")
+        Templates_arr(3, i + 1) = GetAttributeOrSpace(Templates.Item(i), "description")
+        Templates_arr(4, i + 1) = GetAttributeOrSpace(Templates.Item(i), "applicableFor")
+        
+        ' Проходим по дочерним элементам текущего элемента списка Templates
+        For j = 0 To Templates.Item(i).ChildNodes.Item(0).ChildNodes.Length - 1
+            
+            ' Заполняем массив значениями атрибутов текущего дочернего элемента и значения переменной Template_id
+            Template_Element_arr(1, k) = Template_id
+            
+            Template_Element_arr(2, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "id")
+            
+            Template_Element_arr(3, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "sortOrder")
+            
+            Template_Element_arr(4, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "description")
+            
+            Template_Element_arr(5, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "hideOnEmptyValue")
+            
+            Template_Element_arr(6, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "mandatory")
+            
+            Template_Element_arr(7, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "prefix")
+            
+            Template_Element_arr(8, k) = GetAttributeOrSpace(Templates.Item(i).ChildNodes.Item(0).ChildNodes.Item(j), "regEx")
+            
+            ' Увеличиваем индекс для добавления следующего элемента в массив Template_Element_arr
+            k = k + 1
+        Next j
+    Next i
+    
+    ' Записываем данные из массива Templates_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "N&N Templates" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "description"
+        .Cells(1, 4).Value = "applicableFor"
+        ' Записываем данные из массива в лист Excel
+        .Range(.Cells(2, 1), .Cells(Templates.Length + 2 - 1, UBound(Templates_arr))).Value _
+            = Application.Transpose(Templates_arr)
+    End With
+    
+    ' Записываем данные из массива Template_Element_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "N&N Template Elements" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "Template_id"
+        .Cells(1, 2).Value = "id"
+        .Cells(1, 3).Value = "sortOrder"
+        .Cells(1, 4).Value = "description"
+        .Cells(1, 5).Value = "hideOnEmptyValue"
+        .Cells(1, 6).Value = "mandatory"
+        .Cells(1, 7).Value = "prefix"
+        .Cells(1, 8).Value = "regEx"
+        ' Записываем данные из массива в лист Excel
+        .Range(.Cells(2, 1), .Cells(Templates.Length * 8 + 2 - 1, UBound(Template_Element_arr))).Value _
+            = Application.Transpose(Template_Element_arr)
+    End With
+
+    ' Получаем список элементов Enumerations из списка ReferenceData
+    Dim Enumerations As Object
+    Set Enumerations = ReferenceData.Item(1).ChildNodes
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Enumerations и их дочерних элементов
+    Dim Enumerations_arr() As Variant
+    ReDim Enumerations_arr(1 To 7, 1 To Enumerations.Length * 50)
+    
+    
+    
+    Dim l As Long ' Индекс для добавления элементов в массив Enumerations_arr
+    l = 1
+    
+    ' Проходим по элементам списка Enumerations
+    For i = 0 To Enumerations.Length - 1
+        Dim List As Object ' Текущий элемент списка Enumerations
+        Set List = Enumerations(i)
+        
+        ' Получаем значения атрибутов текущего элемента списка Enumerations
+        Dim id As Variant
+        id = GetAttributeOrSpace(List, "id")
+        
+    
+        Dim sortedOrder As Variant
+        sortedOrder = ""
+        
+        Dim aspect As Variant
+        aspect = GetAttributeOrSpace(List, "aspect")
+        
+    
+        Dim name As Variant
+        name = GetAttributeOrSpace(List, "name")
+    
+        Dim description As Variant
+        description = GetAttributeOrSpace(List, "description")
+        
+        ' Получаем значения атрибутов name и description на русском языке если они есть
+        Dim Name_ru As String
+        Dim description_ru As Variant
+        
+        If Enumerations.Item(i).ChildNodes.Length > 0 Then
+        
+            Dim t As Long
+            For t = 0 To Enumerations.Item(i).ChildNodes.Length - 1
+                If Enumerations.Item(i).ChildNodes.Item(t).nodeName = "Languages" Then
+                    If Enumerations.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = ""
+                    Else
+                        Name_ru = Enumerations.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If Enumerations.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = ""
+                    Else
+                        description_ru = Enumerations.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    Exit For
+                Else
+                    Name_ru = ""
+                    description_ru = ""
+                    Exit For
+                End If
+            Next t
+        End If
+        
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Enumerations
+        Enumerations_arr(1, l) = id
+        Enumerations_arr(2, l) = sortedOrder
+        Enumerations_arr(3, l) = aspect
+        Enumerations_arr(4, l) = name
+        Enumerations_arr(5, l) = Name_ru
+        Enumerations_arr(6, l) = description
+        Enumerations_arr(7, l) = description_ru
+    
+        l = l + 1
+        
+' Проверяем, есть ли дочерние элементы у текущего элемента списка Enumerations
+        If Enumerations.Item(i).ChildNodes.Length = 0 Then
+        ' Если дочерних элементов нет, то заполняем массив пустыми значениями
+            Dim id_item As Variant
+            id_item = ""
+    
+            Dim sortedOrder_item As Variant
+            sortedOrder_item = ""
+    
+            Dim aspect_item As Variant
+            aspect_item = ""
+    
+            Dim name_item As Variant
+            name_item = ""
+    
+            Dim description_item As Variant
+            description_item = ""
+            
+            Dim Name_item_ru As Variant
+            Name_item_ru = ""
+
+            Dim description_item_ru As Variant
+            description_item_ru = ""
+    
+            Enumerations_arr(1, l) = id_item
+            Enumerations_arr(2, l) = sortedOrder_item
+            Enumerations_arr(3, l) = aspect_item
+            Enumerations_arr(4, l) = name_item
+            Enumerations_arr(5, l) = Name_item_ru
+            Enumerations_arr(6, l) = description_item
+            Enumerations_arr(7, l) = description_item_ru
+    
+            l = l + 1
+
+        Else ' Если дочерние элементы у текущего элемента списка Enumerations есть
+         ' Проходим по дочерним элементам текущего элемента списка Enumerations
+            For j = 0 To Enumerations.Item(i).ChildNodes.Length - 1
+            ' Проверяем, является ли текущий дочерний элемент списком Items
+                If Enumerations.Item(i).ChildNodes.Item(j).nodeName = "Items" Then
+                ' Проходим по элементам списка Items
+                    For k = 0 To Enumerations.Item(i).ChildNodes.Item(j).ChildNodes.Length - 1
+                        Dim List_item As Object
+                        Set List_item = Enumerations.Item(i).ChildNodes.Item(j).ChildNodes.Item(k)
+    
+                         ' Получаем значения атрибутов текущего элемента списка Items и значения переменной id (атрибут id текущего элемента списка Enumerations)
+                        id_item = id & "_" & GetAttributeOrSpace(List_item, "id")
+    
+                        
+                        sortedOrder_item = GetAttributeOrSpace(List_item, "sortOrder")
+    
+                        
+                        aspect_item = ""
+    
+                        
+                        name_item = GetAttributeOrSpace(List_item, "name")
+    
+                        
+                        description_item = GetAttributeOrSpace(List_item, "description")
+                        ' Получаем значения атрибутов name и description на русском языке, если они есть
+                        If List_item.ChildNodes.Length > 0 Then
+                            For t = 0 To List_item.ChildNodes.Length - 1
+                                If List_item.ChildNodes.Item(t).nodeName = "Languages" Then
+                                    If List_item.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                                        Name_item_ru = ""
+                                    Else
+                                        Name_item_ru = List_item.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                                    End If
+                                    
+                                    If List_item.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                                        description_item_ru = ""
+                                    Else
+                                        description_item_ru = List_item.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).Text
+                                    End If
+                                    Exit For
+                                    
+                                Else
+                                    Name_item_ru = ""
+                                    description_item_ru = ""
+                                    Exit For
+                                End If
+                            Next t
+                        End If
+    
+    
+                        Enumerations_arr(1, l) = id_item
+                        Enumerations_arr(2, l) = sortedOrder_item
+                        Enumerations_arr(3, l) = aspect_item
+                        Enumerations_arr(4, l) = name_item
+                        Enumerations_arr(5, l) = Name_item_ru
+                        Enumerations_arr(6, l) = description_item
+                        Enumerations_arr(7, l) = description_item_ru
+    
+                        l = l + 1
+                        
+                    Next k
+                End If
+            Next j
+        End If
+    Next i
+
+    ' Добавляем новый лист в книгу Excel и задаем ему имя и заголовки столбцов
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+        .name = "Enumerations"
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "sortOrder"
+        .Cells(1, 3).Value = "aspect"
+        .Cells(1, 4).Value = "name"
+        .Cells(1, 5).Value = "Name_ru"
+        .Cells(1, 6).Value = "description"
+        .Cells(1, 7).Value = "description_ru"
+    End With
+    
+    ' Вызываем функцию OutputArray для вывода элементов массива Enumerations_arr в лист Excel
+    res = OutputArray(FlattenArray(Enumerations_arr), 7)
+    
+    ' Получаем список элементов UoM из списка ReferenceData
+    Dim UoM As Object
+    Set UoM = ReferenceData.Item(2).ChildNodes
+    
+    ' Получаем первый элемент списка UoM
+    Dim Units As Object
+    Set Units = UoM(0)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов первого элемента списка UoM
+    Dim Units_arr() As Variant
+    ReDim Units_arr(1 To 6, 1 To Units.ChildNodes.Length)
+    
+    k = 1 ' Индекс для добавления элементов в массив Units_arr
+    
+    ' Проходим по дочерним элементам первого элемента списка UoM
+    For i = 0 To Units.ChildNodes.Length - 1
+        
+        Dim Unit As Object ' Текущий дочерний элемент первого элемента списка UoM
+        Set Unit = Units.ChildNodes.Item(i)
+        
+        ' Получаем значения атрибутов текущего дочернего элемента первого элемента списка UoM
+        id = GetAttributeOrSpace(Unit, "id")
+        
+        name = GetAttributeOrSpace(Unit, "name")
+        
+        description = GetAttributeOrSpace(Unit, "description")
+        
+        Dim symbol As String ' Значение атрибута symbol текущего дочернего элемента первого элемента списка UoM
+        symbol = GetAttributeOrSpace(Unit, "symbol")
+        
+        ' Получаем значения атрибутов name и description на русском языке, если они есть
+        
+        If Unit.ChildNodes.Length > 0 Then
+            
+            For t = 0 To Unit.ChildNodes.Length - 1
+                
+                If Unit.ChildNodes.Item(t).nodeName = "Languages" Then
+                    
+                    If Unit.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = ""
+                    Else
+                        Name_ru = Unit.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If Unit.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = ""
+                    Else
+                        description_ru = Unit.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего дочернего элемента первого элемента списка UoM, так как нашли нужные данные
+                    
+                Else ' Если текущий дочерний элемент не является списком языковых версий атрибутов name и description
+                    
+                    Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+                    
+                    description_ru = ""
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего дочернего элемента первого элемента списка UoM, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        Else
+            
+            Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+            
+            description_ru = ""
+            
+        End If
+        
+        ' Заполняем массив значениями атрибутов текущего дочернего элемента первого элемента списка UoM
+        
+        Units_arr(1, k) = id
+        
+        Units_arr(2, k) = name
+        
+        Units_arr(3, k) = Name_ru
+        
+        Units_arr(4, k) = description
+        
+        Units_arr(5, k) = description_ru
+        
+        Units_arr(6, k) = symbol
+        
+        k = k + 1 ' Увеличиваем индекс для добавления следующего элемента в массив Units_arr
+        
+    Next i
+    
+    ' Записываем данные из массива Units_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "Units" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "Name_ru"
+        .Cells(1, 4).Value = "description"
+        .Cells(1, 5).Value = "description_ru"
+        .Cells(1, 6).Value = "symbol"
+        ' Записываем данные из массива в лист Excel
+        .Range(.Cells(2, 1), .Cells(Units.ChildNodes.Length, UBound(Units_arr))).Value _
+            = Application.Transpose(Units_arr)
+    End With
+    
+    
+    
+    ' Получаем второй элемент списка UoM
+    Dim MeasureClasses As Object
+    Set MeasureClasses = UoM.Item(1)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов второго элемента списка UoM
+    Dim MeasureClasses_arr() As Variant
+    ReDim MeasureClasses_arr(1 To 6, 1 To MeasureClasses.ChildNodes.Length * 2)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов дочерних элементов второго элемента списка UoM
+    Dim MeasureClasses_Units_arr() As Variant
+    ReDim MeasureClasses_Units_arr(1 To 7, 1 To MeasureClasses.ChildNodes.Length * 50)
+    
+    k = 1 ' Индекс для добавления элементов в массив MeasureClasses_arr
+    Dim m As Long ' Индекс для добавления элементов в массив MeasureClasses_Units_arr
+    m = 1
+    
+    ' Проходим по дочерним элементам второго элемента списка UoM
+    For i = 0 To MeasureClasses.ChildNodes.Length - 1
+        
+        Dim MeasureClass As Object ' Текущий дочерний элемент второго элемента списка UoM
+        Set MeasureClass = MeasureClasses.ChildNodes.Item(i)
+        
+        ' Получаем значения атрибутов текущего дочернего элемента второго элемента списка UoM
+        id = GetAttributeOrSpace(MeasureClass, "id")
+        
+        name = GetAttributeOrSpace(MeasureClass, "name")
+        
+        description = GetAttributeOrSpace(MeasureClass, "description")
+        
+        Name_ru = GetAttributeOrSpace(MeasureClass, "id")
+        
+        description_ru = GetAttributeOrSpace(MeasureClass, "id")
+        
+        Dim sortOrder As String ' Значение атрибута sortOrder текущего дочернего элемента второго элемента списка UoM
+        sortOrder = ""
+        
+        ' Получаем значения атрибутов name и description на русском языке, если они есть
+        
+        If MeasureClass.ChildNodes.Length > 0 Then
+            
+            For t = 0 To MeasureClass.ChildNodes.Length - 1
+                
+                If MeasureClass.ChildNodes.Item(t).nodeName = "Languages" Then
+                    
+                    If MeasureClass.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = Name_ru
+                    Else
+                        Name_ru = MeasureClass.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If MeasureClass.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = description_ru
+                    Else
+                        description_ru = MeasureClass.ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего дочернего элемента второго элемента списка UoM, так как нашли нужные данные
+                    
+                Else ' Если текущий дочерний элемент не является списком языковых версий атрибутов name и description
+                    
+                    Name_ru = Name_ru ' Значения атрибутов name и description на русском языке отсутствуют
+                    
+                    description_ru = description_ru
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего дочернего элемента второго элемента списка UoM, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        End If
+        
+        ' Заполняем массив значениями атрибутов текущего дочернего элемента второго элемента списка UoM
+        
+        MeasureClasses_arr(1, k) = id
+        
+        MeasureClasses_arr(2, k) = name
+        
+        MeasureClasses_arr(3, k) = Name_ru
+        
+        MeasureClasses_arr(4, k) = sortOrder
+        
+        MeasureClasses_arr(5, k) = description
+        
+        MeasureClasses_arr(6, k) = description_ru
+        
+        k = k + 1 ' Увеличиваем индекс для добавления следующего элемента в массив MeasureClasses_arr
+        
+    
+        ' Проверяем, есть ли дочерние элементы у текущего дочернего элемента второго элемента списка UoM
+        If MeasureClass.ChildNodes.Length = 0 Then
+            ' Если дочерних элементов нет, то заполняем массив пустыми значениями
+            
+            Dim id_unit As String
+            id_unit = ""
+            
+            Dim sortedOrder_unit As String
+            sortedOrder_unit = ""
+            
+            Dim name_Unit As String
+            name_Unit = ""
+            
+            Dim description_Unit As String
+            description_Unit = ""
+            
+            Dim Name_Unit_ru As String
+            Name_Unit_ru = ""
+            
+            Dim description_Unit_ru As String
+            description_Unit_ru = ""
+            
+            MeasureClasses_Units_arr(1, m) = id ' Записываем значение переменной id (атрибут id текущего дочернего элемента второго элемента списка UoM) в массив
+            MeasureClasses_Units_arr(2, m) = id_unit
+            MeasureClasses_Units_arr(3, m) = name_Unit
+            MeasureClasses_Units_arr(4, m) = Name_Unit_ru
+            MeasureClasses_Units_arr(5, m) = sortedOrder_unit
+            MeasureClasses_Units_arr(6, m) = description_Unit
+            MeasureClasses_Units_arr(7, m) = description_Unit_ru
+            
+            m = m + 1 ' Увеличиваем индекс для добавления следующего элемента в массив MeasureClasses_Units_arr
+        
+        Else ' Если дочерние элементы у текущего дочернего элемента второго элемента списка UoM есть
+            
+            ' Проходим по дочерним элементам текущего дочернего элемента второго элемента списка UoM
+            For j = 0 To MeasureClass.ChildNodes.Length - 1
+                
+                ' Проверяем, является ли текущий дочерний элемент списком Units
+                If MeasureClass.ChildNodes.Item(j).nodeName = "Units" Then
+                    
+                    ' Проходим по элементам списка Units
+                    For l = 0 To MeasureClass.ChildNodes.Item(j).ChildNodes.Length - 1
+                        
+                        Dim MeasureClasses_Unit As Object ' Текущий элемент списка Units
+                        Set MeasureClasses_Unit = MeasureClass.ChildNodes.Item(j).ChildNodes.Item(l)
+                        
+                        ' Получаем значения атрибутов текущего элемента списка Units и значения переменной id (атрибут id текущего дочернего элемента второго элемента списка UoM)
+                        id_unit = GetAttributeOrSpace(MeasureClasses_Unit, "id")
+                        
+                        sortedOrder_unit = GetAttributeOrSpace(MeasureClasses_Unit, "sortOrder")
+                        
+                        name_Unit = GetAttributeOrSpace(MeasureClasses_Unit, "id")
+                        
+                        Name_Unit_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+                        
+                        description_Unit = ""
+                        
+                        description_Unit_ru = ""
+                        
+                        ' Заполняем массив значениями атрибутов текущего элемента списка Units и значениями переменных id и id_unit (атрибуты id текущего дочернего элемента второго элемента списка UoM и текущего элемента списка Units соответственно)
+                        MeasureClasses_Units_arr(1, m) = id
+                        
+                        MeasureClasses_Units_arr(2, m) = id_unit
+                        
+                        MeasureClasses_Units_arr(3, m) = name_Unit
+                        
+                        MeasureClasses_Units_arr(4, m) = Name_Unit_ru
+                        
+                        MeasureClasses_Units_arr(5, m) = sortedOrder_unit
+                        
+                        MeasureClasses_Units_arr(6, m) = description_Unit
+                        
+                        MeasureClasses_Units_arr(7, m) = description_Unit_ru
+                        
+                        m = m + 1 ' Увеличиваем индекс для добавления следующего элемента в массив MeasureClasses_Units_arr
+                        
+                    Next l
+                    
+                End If
+                
+            Next j
+            
+        End If
+        
+    Next i
+        
+        ' Записываем данные из массива MeasureClasses_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+            .name = "MeasureClasses" ' Задаем имя листа
+            ' Записываем заголовки столбцов
+            .Cells(1, 1).Value = "id"
+            .Cells(1, 2).Value = "name"
+            .Cells(1, 3).Value = "Name_ru"
+            .Cells(1, 4).Value = "sortOrder"
+            .Cells(1, 5).Value = "description"
+            .Cells(1, 6).Value = "description_ru"
+            ' Записываем данные из массива в лист Excel
+            .Range(.Cells(2, 1), .Cells(MeasureClasses.ChildNodes.Length * 2, UBound(MeasureClasses_arr))).Value _
+                = Application.Transpose(MeasureClasses_arr)
+    End With
+        
+        ' Записываем данные из массива MeasureClasses_Units_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+            .name = "MeasureClasses Units" ' Задаем имя листа
+            ' Записываем заголовки столбцов
+            .Cells(1, 1).Value = "id"
+            .Cells(1, 2).Value = "id_unit"
+            .Cells(1, 3).Value = "name_Unit"
+            .Cells(1, 4).Value = "Name_Unit_ru"
+            .Cells(1, 5).Value = "sortedOrder_unit"
+            .Cells(1, 6).Value = "description_Unit"
+            .Cells(1, 7).Value = "description_Unit_ru"
+            ' Записываем данные из массива в лист Excel
+            .Range(.Cells(2, 1), .Cells(MeasureClasses.ChildNodes.Length * 50, UBound(MeasureClasses_Units_arr))).Value _
+                = Application.Transpose(MeasureClasses_Units_arr)
+    End With
+    
+    
+    ' Получаем список элементов Taxonomies из списка ReferenceData
+    Dim Taxonomies As Object
+    Set Taxonomies = ReferenceData.Item(3).ChildNodes
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Taxonomies и их дочерних элементов
+    Dim Taxonomie_arr() As Variant
+    ReDim Taxonomie_arr(1 To 4, 1 To Taxonomies.Length * 10)
+    
+    l = 1 ' Индекс для добавления элементов в массив Taxonomie_arr
+    
+    ' Проходим по элементам списка Taxonomies
+    For i = 0 To Taxonomies.Length - 1
+        
+        Dim Taxonomie As Object ' Текущий элемент списка Taxonomies
+        Set Taxonomie = Taxonomies.Item(i)
+        
+        ' Получаем значения атрибутов текущего элемента списка Taxonomies
+        id = GetAttributeOrSpace(Taxonomie, "id")
+        
+        name = GetAttributeOrSpace(Taxonomie, "name")
+        
+        Dim concept As String ' Значение атрибута concept текущего элемента списка Taxonomies
+        concept = GetAttributeOrSpace(Taxonomie, "concept")
+        
+        Dim Class_id As String ' Строка, содержащая значения атрибута id дочерних элементов текущего элемента списка Taxonomies, разделенные запятыми
+        Class_id = ""
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Taxonomies
+        
+        Taxonomie_arr(1, l) = concept
+        
+        Taxonomie_arr(2, l) = id
+        
+        Taxonomie_arr(3, l) = name
+        
+        Taxonomie_arr(4, l) = Class_id
+        
+        l = l + 1 ' Увеличиваем индекс для добавления следующего элемента в массив Taxonomie_arr
+        
+        ' Проходим по дочерним элементам первого дочернего элемента текущего элемента списка Taxonomies
+        For j = 0 To Taxonomie.ChildNodes.Item(0).ChildNodes.Length - 1
+            
+            Dim Node As Object ' Текущий дочерний элемент первого дочернего элемента текущего элемента списка Taxonomies
+            Set Node = Taxonomie.ChildNodes.Item(0).ChildNodes.Item(j)
+            
+            concept = "" ' Значение атрибута concept текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies
+            
+            Dim id_node As String ' Значение атрибута id текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies и значения переменной id (атрибут id текущего элемента списка Taxonomies)
+            id_node = id & "_" & GetAttributeOrSpace(Node, "id")
+            
+            Dim name_node As String ' Значение атрибута name текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies
+            name_node = GetAttributeOrSpace(Node, "name")
+            
+            Dim Class_Id_arr() As String ' Создаем массив для хранения значений атрибута id дочерних элементов первого дочернего элемента текущего дочернего элемента второго элемента списка UoM
+            ReDim Class_Id_arr(1 To Node.ChildNodes.Item(0).ChildNodes.Length)
+     
+            ' Проходим по дочерним элементам первого дочернего элемента текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies
+            For k = 0 To Node.ChildNodes.Item(0).ChildNodes.Length - 1
+                
+                Dim Class As Object ' Текущий дочерний элемент первого дочернего элемента текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies
+                Set Class = Node.ChildNodes.Item(0).ChildNodes.Item(k)
+                
+                ' Заполняем массив значениями атрибута id текущего дочернего элемента первого дочернего элемента текущего дочернего элемента первого дочернего элемента текущего элемента списка Taxonomies
+                Class_Id_arr(k + 1) = GetAttributeOrSpace(Class, "id")
+                
+            Next k
+            
+            ' Соединяем значения массива в строку, разделенную запятыми
+            Class_id = Join(Class_Id_arr, ", ")
+    
+            Taxonomie_arr(1, l) = concept
+            Taxonomie_arr(2, l) = id_node
+            Taxonomie_arr(3, l) = name_node
+            Taxonomie_arr(4, l) = Class_id
+    
+            l = l + 1 ' Увеличиваем индекс для добавления следующего элемента в массив Taxonomie_arr
+        Next j
+    Next i
+    
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    .name = "Taxonomie"
+    .Cells(1, 1).Value = "concept"
+    .Cells(1, 2).Value = "id"
+    .Cells(1, 3).Value = "name"
+    .Cells(1, 4).Value = "Class"
+    End With
+    
+    ' Вызываем функцию OutputArray для вывода элементов массива Taxonomie_arr в лист Excel
+    res = OutputArray(FlattenArray(Taxonomie_arr), 4)
+    
+    ' Получаем список элементов Attributes из XML-документа
+    Dim Attribute_s As MSXML2.IXMLDOMNodeList
+    Set Attribute_s = LoadXMLDoc.DocumentElement.SelectNodes("*[local-name()='Attributes']/*")
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Attributes
+    Dim Attributes_arr() As Variant
+    ReDim Attributes_arr(1 To 10, 1 To Attribute_s.Length)
+    
+    ' Проходим по элементам списка Attributes
+    For i = 0 To Attribute_s.Length - 1
+        
+        Dim Attribut_e As Object ' Текущий элемент списка Attributes
+        Set Attribut_e = Attribute_s.Item(i)
+        
+        ' Получаем значения атрибутов текущего элемента списка Attributes
+        id = GetAttributeOrSpace(Attribut_e, "id")
+        
+        name = GetAttributeOrSpace(Attribut_e, "name")
+        
+        description = GetAttributeOrSpace(Attribut_e, "description")
+        
+        Dim size As String ' Значение атрибута size текущего элемента списка Attributes
+        size = GetAttributeOrSpace(Attribut_e, "size")
+        
+        Dim presence As String ' Значение атрибута presence текущего элемента списка Attributes
+        presence = GetAttributeOrSpace(Attribut_e, "presence")
+        
+        Dim groupId As String ' Значение атрибута groupId текущего элемента списка Attributes
+        groupId = GetAttributeOrSpace(Attribut_e, "groupId")
+        
+        concept = GetAttributeOrSpace(Attribut_e, "presconceptence")
+        
+        Dim dataType As String ' Значение атрибута dataType текущего элемента списка Attributes
+        dataType = GetAttributeOrSpace(Attribut_e, "dataType")
+        
+        ' Получаем значения атрибутов name и description на русском языке, если они есть
+        
+        If Attribute_s.Item(i).ChildNodes.Length > 0 Then
+            
+            For t = 0 To Attribute_s.Item(i).ChildNodes.Length - 1
+                
+                If Attribute_s.Item(i).ChildNodes.Item(t).nodeName = "Languages" Then
+                    
+                    If Attribute_s.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = ""
+                    Else
+                        Name_ru = Attribute_s.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If Attribute_s.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = ""
+                    Else
+                        description_ru = Attribute_s.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Attributes, так как нашли нужные данные
+                    
+                Else ' Если текущий дочерний элемент не является списком языковых версий атрибутов name и description
+                    
+                    Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+                    
+                    description_ru = ""
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Attributes, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        Else
+            
+            Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+            
+            description_ru = ""
+            
+        End If
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Attributes
+        
+        Attributes_arr(1, i + 1) = id
+        
+        Attributes_arr(2, i + 1) = name
+        
+        Attributes_arr(3, i + 1) = Name_ru
+        
+        Attributes_arr(4, i + 1) = description
+        
+        Attributes_arr(5, i + 1) = description_ru
+        
+        Attributes_arr(6, i + 1) = size
+        
+        Attributes_arr(7, i + 1) = presence
+        
+        Attributes_arr(8, i + 1) = groupId
+        
+        Attributes_arr(9, i + 1) = concept
+        
+        Attributes_arr(10, i + 1) = dataType
+        
+    Next i
+    
+    ' Записываем данные из массива Attributes_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "Attributes" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "Name_ru"
+        .Cells(1, 4).Value = "description"
+        .Cells(1, 5).Value = "description_ru"
+        .Cells(1, 6).Value = "size"
+        .Cells(1, 7).Value = "presence"
+        .Cells(1, 8).Value = "groupId"
+        .Cells(1, 9).Value = "concept"
+        .Cells(1, 10).Value = "dataType"
+    End With
+    
+    ' Вызываем функцию OutputArray для вывода элементов массива Attributes_arr в лист Excel
+    res = OutputArray(FlattenArray(Attributes_arr), 10)
+
+    ' Получаем список элементов Functionals из XML-документа
+    Dim Functionals As MSXML2.IXMLDOMNodeList
+    Set Functionals = LoadXMLDoc.DocumentElement.SelectNodes("*[local-name()='Functionals']/*")
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Functionals
+    Dim Functionals_Class_arr() As Variant
+    ReDim Functionals_Class_arr(1 To 8, 1 To Functionals.Length)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов элементов списка Functionals
+    Dim Functionals_NamingTemplates_arr() As Variant
+    ReDim Functionals_NamingTemplates_arr(1 To 3, 1 To Functionals.Length * 30)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов дочерних элементов элементов списка Functionals
+    Dim Functionals_Attributes_arr() As Variant
+    ReDim Functionals_Attributes_arr(1 To 8, 1 To Functionals.Length * 70)
+    
+    m = 1 ' Индекс для добавления элементов в массив Functionals_Attributes_arr
+    
+    k = 1 ' Индекс для добавления элементов в массив Functionals_NamingTemplates_arr
+    
+    ' Проходим по элементам списка Functionals
+    For i = 0 To Functionals.Length - 1
+        
+        Set Class = Functionals.Item(i) ' Текущий элемент списка Functionals
+        
+        ' Получаем значения атрибутов текущего элемента списка Functionals
+        Class_id = GetAttributeOrSpace(Class, "id")
+        
+        name = GetAttributeOrSpace(Class, "name")
+        
+        description = GetAttributeOrSpace(Class, "description")
+        
+        Dim abstract As String ' Значение атрибута abstract текущего элемента списка Functionals
+        abstract = GetAttributeOrSpace(Class, "abstract")
+        
+        Dim extends As String ' Значение атрибута extends текущего элемента списка Functionals
+        extends = GetAttributeOrSpace(Class, "extends")
+        
+        Dim type_ As String ' Значение атрибута type текущего элемента списка Functionals
+        type_ = GetAttributeOrSpace(Class, "type")
+        
+        ' Получаем значения атрибутов name и description на русском языке, если они есть
+        
+        If Functionals.Item(i).ChildNodes.Length > 0 Then
+            
+            For t = 0 To Functionals.Item(i).ChildNodes.Length - 1
+                
+                If Functionals.Item(i).ChildNodes.Item(t).nodeName = "Languages" Then
+                    
+                    If Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = ""
+                    Else
+                        Name_ru = Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = ""
+                    Else
+                        description_ru = Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Generals, так как нашли нужные данные
+                    
+                Else ' Если текущий дочерний элемент не является списком языковых версий атрибутов name и description
+                    
+                    Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+                    
+                    description_ru = ""
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Generals, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        Else
+            
+            Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+            
+            description_ru = ""
+            
+        End If
+        
+        Functionals_Class_arr(1, i + 1) = Class_id
+        Functionals_Class_arr(2, i + 1) = name
+        Functionals_Class_arr(3, i + 1) = Name_ru
+        Functionals_Class_arr(4, i + 1) = description
+        Functionals_Class_arr(5, i + 1) = description_ru
+        Functionals_Class_arr(6, i + 1) = abstract
+        Functionals_Class_arr(7, i + 1) = extends
+        Functionals_Class_arr(8, i + 1) = type_
+        
+        
+                ' Получаем значения атрибутов id и applicableFor дочерних элементов текущего элемента списка Functionals
+        Dim NamingTemplate_id As String ' Значение атрибута id дочернего элемента текущего элемента списка Functionals
+        Dim applicableFor As String ' Значение атрибута applicableFor дочернего элемента текущего элемента списка Functionals
+        
+        If Functionals.Item(i).ChildNodes.Length > 0 Then
+            
+            For t = 0 To Functionals.Item(i).ChildNodes.Length - 1
+                
+                If Functionals.Item(i).ChildNodes.Item(t).nodeName = "NamingTemplates" Then
+                    
+                    If Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(0) Is Nothing Then
+                        NamingTemplate_id = ""
+                    Else
+                        NamingTemplate_id = Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(0).NodeValue
+                    End If
+                    
+                    If Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        applicableFor = ""
+                    Else
+                        applicableFor = Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    ' Заполняем массив значениями переменных Class_id (атрибут id текущего элемента списка Generals), NamingTemplate_id (атрибут id текущего дочернего элемента списка NamingTemplates) и applicableFor (атрибут applicableFor текущего дочернего элемента списка NamingTemplates)
+                    Functionals_NamingTemplates_arr(1, m) = Class_id
+                    
+                    Functionals_NamingTemplates_arr(2, m) = NamingTemplate_id
+                    
+                    Functionals_NamingTemplates_arr(3, m) = applicableFor
+                    
+                    m = m + 1 ' Увеличиваем индекс для добавления следующего элемента в массив Functionals_NamingTemplates_arr
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Generals, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        End If
+        
+        ' Проходим по дочерним элементам текущего элемента списка Generals
+        If Functionals.Item(i).ChildNodes.Length > 0 Then
+            
+            For t = 0 To Functionals.Item(i).ChildNodes.Length - 1
+                
+                ' Проверяем, является ли текущий дочерний элемент списком Attributes
+                If Functionals.Item(i).ChildNodes.Item(t).nodeName = "Attributes" Then
+                    
+                    ' Проходим по элементам списка Attributes
+                    For j = 0 To Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Length - 1
+                        
+                        Dim Functionals_Attribute As Object ' Текущий элемент списка Attributes
+                        Set Functionals_Attribute = Functionals.Item(i).ChildNodes.Item(t).ChildNodes.Item(j)
+                        
+                        ' Получаем значения атрибутов текущего элемента списка Attributes
+                        Dim Functionals_Attributes_id As String
+                        Functionals_Attributes_id = GetAttributeOrSpace(Functionals_Attribute, "id")
+                        
+                        Dim Functionals_Attributes_name As String
+                        Functionals_Attributes_name = GetAttributeOrSpace(Functionals_Attribute, "name")
+                        
+                        Dim Functionals_Attributes_description As String
+                        Functionals_Attributes_description = GetAttributeOrSpace(Functionals_Attribute, "description")
+                        
+                        Dim Functionals_Attributes_size As String
+                        Functionals_Attributes_size = GetAttributeOrSpace(Functionals_Attribute, "size")
+                                    
+                        Dim Functionals_Attributes_presence As String
+                        Functionals_Attributes_presence = GetAttributeOrSpace(Functionals_Attribute, "presence")
+                                    
+                        Dim Functionals_Attributes_validationType As String
+                        Functionals_Attributes_validationType = GetAttributeOrSpace(Functionals_Attribute, "validationType")
+                                    
+                        Dim Functionals_Attributes_validationRule As String
+                        Functionals_Attributes_validationRule = GetAttributeOrSpace(Functionals_Attribute, "validationRule")
+                                    
+                        Functionals_Attributes_arr(1, k) = Class_id
+                        Functionals_Attributes_arr(2, k) = Functionals_Attributes_id
+                        Functionals_Attributes_arr(3, k) = Functionals_Attributes_name
+                        Functionals_Attributes_arr(4, k) = Functionals_Attributes_description
+                        Functionals_Attributes_arr(5, k) = Functionals_Attributes_size
+                        Functionals_Attributes_arr(6, k) = Functionals_Attributes_presence
+                        Functionals_Attributes_arr(7, k) = Functionals_Attributes_validationType
+                        Functionals_Attributes_arr(8, k) = Functionals_Attributes_validationRule
+                        k = k + 1
+                    Next j
+                End If
+            Next t
+        End If
+    Next i
+    
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    .name = "Functionals_Class"
+    .Cells(1, 1).Value = "Class_id"
+    .Cells(1, 2).Value = "name"
+    .Cells(1, 3).Value = "Name_ru"
+    .Cells(1, 4).Value = "description"
+    .Cells(1, 5).Value = "description_ru"
+    .Cells(1, 6).Value = "abstract"
+    .Cells(1, 7).Value = "extends"
+    .Cells(1, 8).Value = "type"
+    End With
+    res = OutputArray(FlattenArray(Functionals_Class_arr), 8)
+
+    
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    .name = "Functionals_NamingTemplates"
+    .Cells(1, 1).Value = "Class_id"
+    .Cells(1, 2).Value = "NamingTemplate_id"
+    .Cells(1, 3).Value = "applicableFor"
+    .Range(.Cells(2, 1), .Cells(Functionals.Length * 30, UBound(Functionals_NamingTemplates_arr))).Value _
+    = Application.Transpose(Functionals_NamingTemplates_arr)
+    End With
+    
+    
+    
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+    .name = "Functionals_Attributes"
+    .Cells(1, 1).Value = "Class_id"
+    .Cells(1, 2).Value = "id"
+    .Cells(1, 3).Value = "name"
+    .Cells(1, 4).Value = "description"
+    .Cells(1, 5).Value = "size"
+    .Cells(1, 6).Value = "presence"
+    .Cells(1, 7).Value = "validationType"
+    .Cells(1, 8).Value = "validationRule"
+    End With
+    res = OutputArray(FlattenArray(Functionals_Attributes_arr), 8)
+    
+    ' Получаем список элементов Generals из XML-документа
+    Dim Generals As MSXML2.IXMLDOMNodeList
+    Set Generals = LoadXMLDoc.DocumentElement.SelectNodes("*[local-name()='Generals']/*")
+    
+    ' Создаем двумерный массив для хранения атрибутов элементов списка Generals
+    Dim Generals_Class_arr() As Variant
+    ReDim Generals_Class_arr(1 To 9, 1 To Generals.Length)
+    
+    ' Создаем двумерный массив для хранения атрибутов дочерних элементов элементов списка Generals
+    Dim Generals_Attributes_arr() As Variant
+    ReDim Generals_Attributes_arr(1 To 2, 1 To Generals.Length * 6)
+    
+    m = 1 ' Индекс для добавления элементов в массив Generals_Attributes_arr
+    
+    ' Проходим по элементам списка Generals
+    For i = 0 To Generals.Length - 1
+        
+        Dim General_Class As Object ' Текущий элемент списка Generals
+        Set General_Class = Generals.Item(i)
+        
+        ' Получаем значения атрибутов текущего элемента списка Generals
+        Class_id = GetAttributeOrSpace(General_Class, "id")
+        
+        Dim obsolete As String ' Значение атрибута obsolete текущего элемента списка Generals
+        obsolete = GetAttributeOrSpace(General_Class, "obsolete")
+        
+        sortOrder = GetAttributeOrSpace(General_Class, "sortOrder")
+        
+        name = GetAttributeOrSpace(General_Class, "name")
+        
+        description = GetAttributeOrSpace(General_Class, "description")
+        
+        abstract = GetAttributeOrSpace(General_Class, "abstract")
+        
+        extends = GetAttributeOrSpace(General_Class, "extends")
+        
+        ' Получаем значения атрибутов name и description на русском языке, если они есть
+        
+        If Generals.Item(i).ChildNodes.Length > 0 Then
+            
+            For t = 0 To Generals.Item(i).ChildNodes.Length - 1
+                
+                If Generals.Item(i).ChildNodes.Item(t).nodeName = "Languages" Then
+                    
+                    If Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1) Is Nothing Then
+                        Name_ru = ""
+                    Else
+                        Name_ru = Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(1).NodeValue
+                    End If
+                    
+                    If Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2) Is Nothing Then
+                        description_ru = ""
+                    Else
+                        description_ru = Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(0).Attributes.Item(2).NodeValue
+                    End If
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Generals, так как нашли нужные данные
+                    
+                Else ' Если текущий дочерний элемент не является списком языковых версий атрибутов name и description
+                    
+                    Name_ru = "" ' Значения атрибутов name и description на русском языке отсутствуют
+                    
+                    description_ru = ""
+                    
+                    Exit For ' Выходим из цикла по дочерним элементам текущего элемента списка Generals, так как нашли нужные данные
+                    
+                End If
+                
+            Next t
+            
+        End If
+        
+        ' Заполняем массив значениями атрибутов текущего элемента списка Generals
+        
+        Generals_Class_arr(1, i + 1) = Class_id
+        
+        Generals_Class_arr(2, i + 1) = name
+        
+        Generals_Class_arr(3, i + 1) = Name_ru
+        
+        Generals_Class_arr(4, i + 1) = description
+        
+        Generals_Class_arr(5, i + 1) = description_ru
+        
+        Generals_Class_arr(6, i + 1) = obsolete
+        
+        Generals_Class_arr(7, i + 1) = sortOrder
+        
+        Generals_Class_arr(8, i + 1) = abstract
+        
+        Generals_Class_arr(9, i + 1) = extends
+        
+        Dim Attribute_id As String ' Значение атрибута id дочернего элемента текущего элемента списка Attributes
+        
+        ' Проверяем, есть ли дочерние элементы у текущего элемента списка Attributes
+        If Generals.Item(i).ChildNodes.Length > 0 Then
+            
+            ' Проходим по дочерним элементам текущего элемента списка Attributes
+            For t = 0 To Generals.Item(i).ChildNodes.Length - 1
+                
+                ' Проверяем, является ли текущий дочерний элемент списком Attributes
+                If Generals.Item(i).ChildNodes.Item(t).nodeName = "Attributes" Then
+                    
+                    ' Проходим по элементам списка Attributes
+                    For j = 0 To Generals.Item(i).ChildNodes.Item(t).ChildNodes.Length - 1:
+                        
+                        ' Получаем значение атрибута id текущего элемента списка Attributes
+                        If Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(j).Attributes.Item(0) Is Nothing Then
+                            Attribute_id = ""
+                        Else
+                            Attribute_id = Generals.Item(i).ChildNodes.Item(t).ChildNodes.Item(j).Attributes.Item(0).NodeValue
+                        End If
+                        
+                        ' Заполняем массив значениями переменных Class_id (атрибут id текущего элемента списка Generals) и Attribute_id (атрибут id текущего элемента списка Attributes)
+                        Generals_Attributes_arr(1, m) = Class_id
+                        
+                        Generals_Attributes_arr(2, m) = Attribute_id
+        
+                        m = m + 1 ' Увеличиваем индекс для добавления следующего элемента в массив Generals_Attributes_arr
+                        
+                    Next j
+                    
+                End If
+                
+            Next t
+            
+        End If
+        
+    Next i
+    
+    ' Записываем данные из массива Generals_Class_arr в новый лист Excel
+    With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count)) ' Добавляем новый лист в книгу Excel
+        .name = "Generals_Class" ' Задаем имя листа
+        ' Записываем заголовки столбцов
+        .Cells(1, 1).Value = "Class_id"
+        .Cells(1, 2).Value = "name"
+        .Cells(1, 3).Value = "Name_ru"
+        .Cells(1, 4).Value = "description"
+        .Cells(1, 5).Value = "description_ru"
+        .Cells(1, 6).Value = "obsolete"
+     .Cells(1, 7).Value = "sortOrder"
+     .Cells(1, 8).Value = "abstract"
+     .Cells(1, 9).Value = "extends"
+     .Range(.Cells(2, 1), .Cells(Generals.Length + 1, UBound(Generals_Class_arr))).Value _
+     = Application.Transpose(Generals_Class_arr)
+     End With
+    
+     With wb.Sheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+     .name = "Generals_Attributes"
+     .Cells(1, 1).Value = "Class_id"
+     .Cells(1, 2).Value = "id"
+     .Range(.Cells(2, 1), .Cells(Generals.Length * 6, UBound(Generals_Attributes_arr))).Value _
+     = Application.Transpose(Generals_Attributes_arr)
+     End With
+    
+    Dim ws As Worksheet
+    For Each ws In wb.Sheets
+        With ws
+            .Range("A1:J1").Font.Bold = True 'Создание заголовков у каждой вкладки жирным текстом
+            .Range("A:J").EntireColumn.AutoFit 'Изменение ширина столбцов
+            .Range("A1:J1").CurrentRegion.AutoFilter 'Добавление фильтров на заголовки
+        End With
+    Next ws
+
+    
+    Dim filename As String
+    filename = "Data_" & Format(Date, "dd-mm-yyyy") & ".xlsx" 'Название файла с текущей датой
+    ActiveWorkbook.SaveAs filename
+    ' wb.SaveAs ThisWorkbook.Path & "\" & filename
+    wb.Close
+    
+    Application.ScreenUpdating = True
+    
+    MsgBox "Макрос завершил работу, а вы нет", vbInformation
+    
+End Sub
+
+
+
+
+
+
+
+
+
+
