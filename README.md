@@ -15,7 +15,7 @@
 
 # XML_vba_Excel.txt
 ### The XML_vba_Excel.txt file is an implementation of database parsing in Excel using VBA.
-###The Microsoft XML library, v 6.0, must be patched in Visual Basic for the macro to work correctly
+### The Microsoft XML library, v 6.0, must be patched in Visual Basic for the macro to work correctly
 ### Implemented:
  ### -selection of the file to be processed
  ### -creation of separate tabs
